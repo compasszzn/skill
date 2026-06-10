@@ -333,10 +333,28 @@ bot 需要将决策结果转化为游戏操作。实现方式取决于步骤1识
 - 点击 UI 按钮要点**真正可交互的那个**（用按钮的 `Selectable`/按名字匹配，而非盲点第一个；有些"跳过"按钮在动画结束后变成空操作）。
 - 点击后**等面板真正关闭再做下一步**（很多关闭是带动画的协程，重复点击会打断关闭、卡在半开状态）。
 
+#### 优先走游戏逻辑层（manager），而不是点 UI 按钮（headless 关键）
+
+**默认做法应是：直接调用游戏的逻辑层 API 来"做选择 + 关面板"，而不是模拟点击 UI 按钮。** 原因：UI 按钮的回调里常夹带**渲染相关副作用**（弹世界空间文字、播放粒子/动画、依赖 `Camera.main`/shader），这些在 `-batchmode -nographics` 下会 **NPE 或异常**，导致面板关不掉、整局卡死。实测踩坑：某游戏升级选卡的 `OnAbilitySelected()` 会 `SpawnText(...)` 弹世界空间提示而 NPE。
+
+正确分层（按可靠性从高到低）：
+1. **逻辑层应用 + 逻辑层关闭**（最稳）：调 manager 应用效果（如 `AbilitiesManager.AddAbility/IncreaseAbilityLevel`），再调面板的 `Hide()`/关闭方法，并**确保其 `onClosed` 回调被触发**（很多游戏靠它恢复 timeScale / 继续波次；若手动关，必须自己 invoke `onClosed`）。
+2. **读候选数据走数据字段、不依赖动画**：候选项数据（如 `slot.AbilityData`）通常在面板一打开就赋值，而绑定到卡片视觉的字段（如 `MainCard`）要等滚动动画结束才有值——优先读前者，避免空引用与等待。
+3. **模拟点击**（最后兜底）：仅当无法走逻辑层时才点 `Selectable` 的 `onClick`；并对"点击后渲染副作用 NPE 但效果其实已生效"做容错。
+4. **强制关闭看门狗**：无论走哪条路，都加超时——面板开启超过 N 秒（unscaled）仍未关，强制置 `IsOpen=false`、恢复 `timeScale=1`、触发 `onClosed`、隐藏 GameObject，**保证永不死锁**。
+
+> 用反射访问 protected 的 manager/字段/方法（`slots`、`OnAbilitySelected`、`Hide`、`onClosed`、`IsOpen`）是常见且可接受的——目标是最小侵入地复用游戏逻辑、绕开 UI 渲染副作用。
+
 ### 3.2c 时间与无头模式
 
 - **计时用 `Time.unscaledTime`**：speed 通过 `Time.timeScale` 缩放时，`Time.time` 会随之失真。战斗 log 的存活时长、录制时间戳等都应基于 unscaled 时间，否则与真实/体感不符（speed=4 时差 4 倍）。
-- **无头（`-batchmode -nographics`）与有画面行为不同**：`Camera.main` 可能为空、渲染相关组件行为有差异、可能停在菜单不自动开局。观察器/录制器要对相机为空兜底；无头下务必验证"自动开局→注入→对局→终局"全链路真的走通。
+- **无头模式失败清单（`-batchmode -nographics`，逐项排查）**：
+  - `Camera.main` 可能为空 → 观察器/录制器必须对空相机兜底。
+  - **渲染副作用 NPE**：世界空间文字、粒子、`shader 不支持`、`Look rotation viewing vector is zero` 等在无图形下报错或异常，常发生在 **UI 按钮回调内** → 阻塞 UI 处理优先走逻辑层（见 3.2b "优先走游戏逻辑层"）。
+  - **video 录制为黑帧**：`-nographics` 不做 GPU 渲染，`recording.mp4` 是黑屏 → **需要可用 VLM 视频时，用 `-batchmode` 但去掉 `-nographics`**（Unity 仍可无窗口渲染到 RenderTexture）。
+  - 可能停在菜单不自动开局 → 必须程序化自动进入对局。
+  - **推荐模式**：① 纯 log 迭代 / 吞吐 sweep → `-batchmode -nographics`（最快）；② 需要真实视频给 VLM → `-batchmode`（不加 `-nographics`）；③ 排查 bot 行为 → 直接带窗口运行（不加 `-batchmode`），肉眼观察 + 录到真实视频。
+  - 无头下务必验证"自动开局→注入→对局→终局"**全链路真的走通**，不要只看进程启动成功。
 - **fresh run**：无人值守每次应开全新一局，主动清掉存档里的续玩进度（关卡时间/经验/已有能力等），否则会"继续上一局"。
 
 ### 3.3 功能与基础设施
@@ -388,6 +406,8 @@ bot 需要将决策结果转化为游戏操作。实现方式取决于步骤1识
 | 最小侵入检查 | 无不必要的游戏代码修改 |
 | 启动参数正确性 | 命令行参数实现是否正确，且支持环境变量传入 |
 | 阻塞式 UI 全覆盖 | 开局/升级/武器/宝箱/复活/通关结算/失败结算等暂停 UI 是否都自动处理，不会卡死 |
+| 阻塞 UI 走逻辑层 | 是否优先调 manager 应用选择 + 关面板（含触发 onClosed），而非点 UI 按钮（避免 headless 下回调渲染副作用 NPE）；是否有强制关闭看门狗防死锁 |
+| headless 兼容 | 是否对 Camera.main 为空兜底；需要 VLM 视频时是否避免 -nographics（黑帧） |
 | 终局检测时机 | 胜/负检测是否先于"暂停就 return"的早退（结算屏会置 timeScale=0） |
 | 计时基准 | 存活时长/时间戳是否用 unscaledTime（不受 speed 缩放影响） |
 | 插桩可信 | 伤害来源/击杀/升级/终局等关键指标确实被记录，可作为迭代依据 |
