@@ -49,6 +49,12 @@
   "duration_seconds": 182,
   "final_player_hp": 0,
   "final_player_hp_max": 100,
+  "progress": {
+    "primary": 4,
+    "primary_max": 28,
+    "throughput": {"kills": 73, "kills_per_min": 24.1, "xp_level": 5},
+    "notes": "卡在第4房间第2波，被自爆精英连锁炸死"
+  },
   "upgrade_choices": [
     {"tick": 65, "choice": "火焰AoE", "alternatives": ["冰冻减速", "攻击速度提升"]}
   ],
@@ -76,6 +82,8 @@
 
 | 字段 | 说明 | 为什么视频不能替代 |
 |------|------|-------------------|
+| progress.primary / primary_max | 已清房间/波次数 vs 通关所需（割草类的进度梯度） | win/lose 二值无梯度；这个连续指标才能判断改动是否朝通关推进 |
+| progress.throughput | 击杀数 / 击杀每分 / XP等级（吞吐与成长效率） | "存活久"≠"接近通关"；吞吐才反映是否真在推进，而非原地苟活 |
 | damage_taken.by_source | 各类型敌人的伤害分布 | 视频能看到"被打"，但看不到具体数字和来源分类 |
 | damage_dealt.by_target_type | 对各类型敌人的伤害分布 | 视频能看到"在攻击"，但看不到具体数值 |
 | upgrade_choices | 升级选择记录 | 视频能看到升级选择画面，但看不到所有备选选项 |
