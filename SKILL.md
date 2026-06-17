@@ -357,6 +357,18 @@ bot 需要将决策结果转化为游戏操作。实现方式取决于步骤1识
   - 无头下务必验证"自动开局→注入→对局→终局"**全链路真的走通**，不要只看进程启动成功。
 - **fresh run**：无人值守每次应开全新一局，主动清掉存档里的续玩进度（关卡时间/经验/已有能力等），否则会"继续上一局"。
 
+### 3.2d 无人值守运行时陷阱清单（集中排查）
+
+下列坑都属于"进程能启动、单跑也像在动，但无人值守批量跑时会静默失效/浪费/卡死"，极难从启动日志发现，务必逐项实现并验证：
+
+- **后台暂停（`Application.runInBackground=0`）**：窗口失焦（或并发跑、最小化）时游戏自动暂停，整个 sweep 停滞，墙钟空耗。→ 运行时无条件设 `Application.runInBackground=true`，并在 ProjectSettings 里也设 `runInBackground: 1`。
+- **`Time.timeScale` 被 UI 面板重置**：很多游戏在每次关闭暂停 UI（升级/结算/宝箱…）时把 `Time.timeScale` 复位为 1，导致 speed 加速被悄悄取消——bot 越频繁开面板（如频繁升级），越接近全程 1×，高速 sweep 形同虚设。→ 在每个运行帧**重新断言** `Time.timeScale = 目标speed`；必要时同步放宽 `Time.maximumDeltaTime`、解除 `targetFrameRate` 限制，让加速真正生效。
+- **纯生存型 bot 的无限长局**：见步骤5"永生不赢"陷阱——设 per-run **游戏内时间上限**，别只靠墙钟 timeout。
+- **本地并发的存档互相覆盖**：local 模式 concurrency>1 时多个实例默认共享同一 `persistentDataPath`，存档数据竞争/损坏（详见步骤5）。→ 给每个实例隔离 `persistentDataPath`。
+- **构建锁残留**：见步骤4"构建卫生"——每次构建前杀残留 Unity 进程 + 删 `Temp/UnityLockfile`。
+
+> 通用验证手法：无人值守跑通后，**核对 log 里的"墙钟时长 vs 游戏内时长"是否符合 speed 倍率**（如 speed=4 时一局墙钟应约为游戏内时长的 1/4）。若两者接近 1:1，多半是 `timeScale` 被复位或后台暂停在作怪。
+
 ### 3.3 功能与基础设施
 
 非决策核心的功能需求，按类别分组：
@@ -410,6 +422,8 @@ bot 需要将决策结果转化为游戏操作。实现方式取决于步骤1识
 | headless 兼容 | 是否对 Camera.main 为空兜底；需要 VLM 视频时是否避免 -nographics（黑帧） |
 | 终局检测时机 | 胜/负检测是否先于"暂停就 return"的早退（结算屏会置 timeScale=0） |
 | 计时基准 | 存活时长/时间戳是否用 unscaledTime（不受 speed 缩放影响） |
+| 后台不暂停 | 是否设 `Application.runInBackground=true`（+ ProjectSettings），失焦/并发不暂停（见 3.2d） |
+| speed 真生效 | 是否每帧重新断言 `Time.timeScale=speed`，防 UI 关闭复位导致加速失效（见 3.2d） |
 | 插桩可信 | 伤害来源/击杀/升级/终局等关键指标确实被记录，可作为迭代依据 |
 
 评估子 agent 输出一份验证报告。发现编译级错误（引用不存在类、输入系统混用、架构与步骤2不一致）或关键逻辑遗漏时，必须修正代码后再继续；次要代码风格建议不阻塞。
@@ -429,6 +443,19 @@ bot 需要将决策结果转化为游戏操作。实现方式取决于步骤1识
 - 用 Editor 脚本 + `-batchmode -quit -executeMethod` 命令行打包，便于自动化；打包是长操作，用后台进程 + 日志轮询。
 - **构建期注入 scripting define 要用 `BuildPlayerOptions.extraScriptingDefines`**，不要用 `PlayerSettings.SetScriptingDefineSymbols`——后者在同一个 batchmode `-executeMethod` 会话里**不会触发重新编译**，gated 代码会被静默编译掉（典型坑：Multiverse SDK 生命周期代码没进包，运行时毫无反应）。
 - Linux Dedicated Server 打包需先装对应构建模块，并设 Server subtarget。
+
+### 构建卫生（每次 batchmode 构建前必做，否则高频崩）
+
+Unity 同一时刻只允许一个进程打开同一工程。自动化反复构建时，上一次的 Unity 进程（或 Editor、或上一次 crash 残留）会持有工程锁，导致新构建直接报 **"another Unity instance is running" / "Multiple Unity instances cannot open the same project"** 并失败。
+
+**每次构建前的清理步骤**（务必先于启动 Unity 执行）：
+1. 杀掉残留的 Unity 进程：
+   - Windows：`Get-Process Unity -ErrorAction SilentlyContinue | Stop-Process -Force`
+   - macOS/Linux：`pkill -f Unity` 或精确匹配该工程的进程
+2. 删除工程锁文件：`<projectPath>/Temp/UnityLockfile`（不存在时忽略）。
+3. 再启动 `Unity -batchmode -quit -projectPath ... -executeMethod ...`。
+
+构建后从日志轮询关键标志（如自定义的 `build SUCCEEDED` / `build FAILED` / `error CS`）判断结果，不要只看进程退出码。
 
 ---
 
@@ -453,6 +480,8 @@ run_sweep 脚本的作用是：自动化批量执行游戏关卡，收集足够�
 - 该脚本支持 speed 参数，决定游戏运行的速度（透传给游戏本身）
 - 该脚本支持 concurrency 参数，决定启动游戏的并发度。并发度大于1时，脚本会启动多个游戏进程来进行游玩
 - 该脚本会分析和记录每次执行游戏的结果，成功与否和用时，最终生成汇总报告写入文件
+
+**纯生存型 bot 的"永生不赢"陷阱（必须设游戏内时间上限）：** 走位/生存型 bot 常出现"永远活着但永远打不死 Boss"的局——它能无限躲避却推不动进度，于是一直跑到墙钟 timeout（如 1800s）才被杀，墙钟严重浪费，且这些局对统计无价值。**只靠墙钟 timeout 不够**：应额外提供一个 **per-run 游戏内时间上限**参数（如 `max-run-seconds`，透传给游戏，到点判负并退出），它不受 speed 缩放与卡死影响，能稳定截断这类无意义长局。墙钟 timeout 仅作最后兜底。
 
 **本地并发的存档隔离（重要）：** local 模式 concurrency>1 时，多个实例默认共享同一 `Application.persistentDataPath` 存档，会互相覆盖导致数据竞争/损坏。必须给每个实例隔离存档（如各自独立的 persistentDataPath），否则只能 concurrency=1。multiverse 模式每个容器独立存档，天然无此问题。
 
