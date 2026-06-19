@@ -49,6 +49,11 @@ git 的作用：从第一个分析报告开始，所有改动都有 commit 记�
     - `references/analysis-template-action-A-scan.md`（实体扫描）
     - `references/analysis-template-action-B-deepdive.md`（实体深挖）
     - `references/analysis-template-action-C-interaction.md`（交互与系统）
+  - **三消/方块消除类**（Candy Crush、Sweet Sugar、宝石迷阵等）→ 按顺序读取：
+    - `references/analysis-template-match3-A-scan.md`（棋子/特殊糖/棋盘块/目标/限制扫描）
+    - `references/analysis-template-match3-B-deepdive.md`（坐标系/块清除触发/目标剩余量深挖）
+    - `references/analysis-template-match3-C-interaction.md`（交换-匹配-下落-目标推进交互）
+    - 编码前**务必先读** `references/match3-bot-playbook.md`（加权评分求解器架构 + 高频致命坑清单 + 机制根因诊断法）
   - 其他类型后续按需新增，每个类型的模板放在 `references/analysis-template-<type>-A/B/C-*.md` 中
 
 步骤1中"游戏类型与核心玩法"的识别结果，决定了需要加载哪个类型深度层模板。类型深度层的每个字段都直接对应 bot 的决策输入——分析是为了决策，不是为了文档好看。
@@ -520,6 +525,8 @@ run_sweep 脚本的作用是：自动化批量执行游戏关卡，收集足够�
 全自动迭代测试循环。每轮 run_sweep → 收集视频 + log → VLM 视频分析 → 联合分析 → 报告 → 自动优化 → commit → 判断目标 → 继续/结束。用户只在开始时设定目标指标，结束时收到最终报告。
 
 > **VLM 不可用时（缺 `DASHSCOPE_API_KEY` / 无网络 / 用户暂缓）**：不要中断迭代，改用**纯 log 诊断法**作为一等替代——读 `references/log-only-diagnosis.md`。它用"密集插桩 + 周期状态快照 + 症状→根因层对照表"补偿看不到画面的信息缺失，在数值与决策推理上甚至比 VLM 更准。拿到 key 后再切回 VLM + log 联合分析。
+
+> **三消/方块消除类**：视频截图常因 batch / shader 问题为黑帧而不可用，**优先采用纯 log 诊断法**，并按 `references/match3-bot-playbook.md` 第四节的"机制根因诊断流程"逐类攻破卡死关卡（读目标身份 → 读源码确认清除机制 → 对照 bot 评分 → 修正后多次取样）。每关至少 3 次取样，单次"通关"不代表修复成功。
 
 > **游戏速度会影响"能不能赢"，不只是吞吐**：高 `Time.timeScale`（speed 3–4x）下敌人每个 bot 决策帧之间多走 N 步，反应式 bot 会反应不及而暴毙。**调优/验证用 speed=1；高速 sweep 只用于已能稳定通关的关卡做吞吐统计。** 若 bot 在高速下早死但低速能活，先怀疑速度而非策略。
 
