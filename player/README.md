@@ -5,7 +5,7 @@
 | 文件 | 类型 | 用途 |
 |------|------|------|
 | `AGInputInjector.cs` | C# 代码 | **通用注入器**。唯一注入口，所有操作经 xdotool OS 级鼠标注入。包含通用接口（ClickScreenPos/ClickWorldPos/ClickColliderTop 等）+ 游戏适配层（AGGameAdapter，按游戏替换）。放入游戏工程 `Assets/` 目录。 |
-| `SequenceReplayer.cs` | C# 代码 | **独立回放器**。放入任意 Unity 游戏工程 `Assets/` 目录，通过 `-sequence` 参数启动，按序列文件的屏幕坐标用 xdotool 重放。不改游戏源码，不依赖任何游戏类型。 |
+| `SequenceReplayer.cs` | C# 代码 | **独立回放器**。放入任意 Unity 游戏工程 `Assets/` 目录，通过 `-sequence` 参数启动，按序列文件的屏幕坐标用 xdotool 重放。不改游戏源码，不依赖任何游戏类型。内置屏幕录像（WaitForEndOfFrame → ffmpeg）。已实战验证（OpenAW3D 91 事件完整对局，2026-09）。 |
 | `RealInputMigration.md` | 文档 | **改造经验**。从 SendMessage 改为 xdotool 真实鼠标注入的完整记录，包含 6 个关键技术决策和踩坑过程。 |
 | `RealInputPrinciple.md` | 文档 | **输入规范**。真实输入驱动的设计原则：禁止 SendMessage/反射，必须用 OS 级鼠标事件。 |
 | `RealMouseInjectionSkill.md` | 文档 | **Skill 总览**。文件清单 + 快速使用 + 接口说明 + 环境依赖。 |
@@ -31,18 +31,23 @@ AUTOGAMER_AUTO=true ./game -screen-width 800 -screen-height 600
 将 `SequenceReplayer.cs` 放入游戏 `Assets/` 目录，重新构建，运行：
 
 ```bash
+# 推荐窗口模式启动（避免全屏/overrideredirect 几何问题）
 AUTOGAMER_AUTO=false \
 ./game \
+  -screen-fullscreen 0 -screen-width 800 -screen-height 600 \
   -sequence /path/to/sequence.json \
-  -screen-width 800 -screen-height 600 \
   -camera-pos 7.5,20,8.5 \
   -camera-rot 90,0,0 \
   -camera-fov 60 \
   -camera-disable-script StrategyCamera \
-  -replay-force-window 800x600 \
   -replay-output-dir /path/to/output \
-  -replay-quit-on-end true
+  -replay-quit-on-end true \
+  -replay-record true -replay-record-fps 15
 ```
+
+> **重要**：优先用 `-screen-fullscreen 0` 窗口模式启动，避免 `-replay-force-window`
+> （overrideredirect 会让窗口管理器重新摆放窗口导致几何不稳，见
+> `SequenceReplaySkill.md` 踩坑 #3）。
 
 ### 3. Python 外部驱动（完全不改游戏）
 
@@ -85,5 +90,6 @@ SequenceReplayer.cs（独立回放器，不依赖任何游戏类型）
 | 依赖 | 安装 |
 |------|------|
 | xdotool | `sudo apt install xdotool` |
+| x11-utils | `sudo apt install x11-utils`（xwininfo，客户区坐标检测） |
 | wmctrl | `sudo apt install wmctrl` |
 | ffmpeg | `sudo apt install ffmpeg` 或 `pip install imageio-ffmpeg` |

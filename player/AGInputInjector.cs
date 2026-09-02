@@ -43,6 +43,7 @@ namespace AutoGamer
 
         static bool _verified;
         static int _gvX, _gvY, _gvW, _gvH;
+        static string _windowWid;
 
         // ---- 窗口检测 ----
 
@@ -51,6 +52,15 @@ namespace AutoGamer
             if (_verified) return true;
             try { DetectGameViewPosition(); _verified = true; return true; }
             catch (Exception e) { AGLog.Warn("xdotool 不可用: " + e.Message); return false; }
+        }
+
+        /// <summary>每次点击前刷新窗口几何（防止窗口被 WM 移动导致点击错位）。</summary>
+        static void RefreshGeometry()
+        {
+            // 仅在 Player 模式下需要刷新（Editor 模式 GameView 位置由 Unity 管理）
+#if !UNITY_EDITOR
+            DetectWindowClientPosition();
+#endif
         }
 
         static void DetectGameViewPosition()
@@ -74,62 +84,110 @@ namespace AutoGamer
             var winId = RunBash("xdotool search --onlyvisible --name \"Tuanjie\" 2>/dev/null | tail -1");
             if (!string.IsNullOrEmpty(winId?.Trim()))
             {
-                var geo = RunBash($"xdotool getwindowgeometry --shell {winId.Trim()}");
-                ParseGeometry(geo);
+                _windowWid = winId.Trim();
+                DetectWindowClientPosition();
             }
 #else
             // Player: 按产品名查找窗口
-            var productName = Application.productName;
-            var winId = "";
-            for (int i = 0; i < 10; i++)
-            {
-                winId = RunBash($"xdotool search --onlyvisible --name \"{productName}\" 2>/dev/null | head -1")?.Trim();
-                if (!string.IsNullOrEmpty(winId)) break;
-                System.Threading.Thread.Sleep(500);
-            }
-            if (string.IsNullOrEmpty(winId))
-                winId = RunBash("xdotool getactivewindow 2>/dev/null")?.Trim();
-
-            if (!string.IsNullOrEmpty(winId))
-            {
-                var geo = RunBash($"xdotool getwindowgeometry --shell {winId}");
-                ParseGeometry(geo);
-
-                // 强制窗口模式（Tuanjie/Unity Player 默认全屏不接收 X11 事件）
-                // overrideredirect+windowsize → 窗口管理器不再管理窗口
-                // 先用 wmctrl 移动窗口到 (0,0)（含标题栏）
-                RunBash($"wmctrl -i -r {winId} -e 0,0,0,{Screen.width},{Screen.height}");
-                System.Threading.Thread.Sleep(500);
-                // 再 overrideredirect+windowsize（取消标题栏 → 客户区从 (0,0) 开始）
-                RunBash($"xdotool set_window --overrideredirect 1 {winId}; xdotool windowsize {winId} {Screen.width} {Screen.height}");
-                System.Threading.Thread.Sleep(500);
-
-                // 重新检测调整后的窗口几何
-                var geo2 = RunBash($"xdotool getwindowgeometry --shell {winId}");
-                ParseGeometry(geo2);
-            }
+            DetectWindowClientPosition();
 #endif
             _gvW = _gvW > 0 ? _gvW : Screen.width;
             _gvH = _gvH > 0 ? _gvH : Screen.height;
             AGLog.Info($"xdotool 已就绪, GameView ({_gvX},{_gvY}) {_gvW}x{_gvH} Screen={Screen.width}x{Screen.height}");
         }
 
-        static void ParseGeometry(string geo)
+        /// <summary>
+        /// 获取窗口客户区（client area）的绝对坐标和大小。
+        /// 
+        /// 关键：xdotool getwindowgeometry 在带 WM 装饰的窗口上返回外框(frame)坐标，
+        /// 包含标题栏和边框。点击坐标必须相对客户区，否则会整体偏移
+        /// （实测 xfwm4：外框 (10,85) vs 客户区 (5,56)，_NET_FRAME_EXTENTS=5,5,29,5）。
+        /// 
+        /// 优先 xwininfo（客户区绝对坐标）；后备 xdotool + _NET_FRAME_EXTENTS 修正；
+        /// 再后备 xdotool 裸值（仅对无装饰/override-redirect 窗口准确）。
+        /// </summary>
+        static void DetectWindowClientPosition()
         {
-            if (string.IsNullOrEmpty(geo)) return;
-            foreach (var line in geo.Split('\n'))
+            // 查找窗口 ID（首次或窗口丢失时）
+            if (string.IsNullOrEmpty(_windowWid))
             {
-                var parts = line.Split('=');
-                if (parts.Length != 2) continue;
-                if (int.TryParse(parts[1].Trim(), out int v))
+                var productName = Application.productName;
+                for (int i = 0; i < 10; i++)
                 {
-                    var key = parts[0].Trim();
-                    if (key == "X") _gvX = v;
-                    else if (key == "Y") _gvY = v;
-                    else if (key == "WIDTH") _gvW = v;
-                    else if (key == "HEIGHT") _gvH = v;
+                    _windowWid = RunBash($"xdotool search --onlyvisible --name \"{productName}\" 2>/dev/null | head -1")?.Trim();
+                    if (!string.IsNullOrEmpty(_windowWid)) break;
+                    System.Threading.Thread.Sleep(500);
+                }
+                if (string.IsNullOrEmpty(_windowWid))
+                    _windowWid = RunBash("xdotool getactivewindow 2>/dev/null")?.Trim();
+            }
+
+            if (string.IsNullOrEmpty(_windowWid))
+            {
+                AGLog.Warn("无法获取窗口 ID");
+                return;
+            }
+
+            int gx = -1, gy = -1, gw = -1, gh = -1;
+
+            // 方法 1：xwininfo（客户区绝对坐标，最可靠）
+            var xwi = RunBash($"xwininfo -id {_windowWid} 2>/dev/null");
+            if (!string.IsNullOrEmpty(xwi))
+            {
+                foreach (var line in xwi.Split('\n'))
+                {
+                    var t = line.Trim();
+                    if (t.StartsWith("Absolute upper-left X:")) int.TryParse(t.Substring(t.IndexOf(':') + 1).Trim(), out gx);
+                    else if (t.StartsWith("Absolute upper-left Y:")) int.TryParse(t.Substring(t.IndexOf(':') + 1).Trim(), out gy);
+                    else if (t.StartsWith("Width:")) int.TryParse(t.Substring(t.IndexOf(':') + 1).Trim(), out gw);
+                    else if (t.StartsWith("Height:")) int.TryParse(t.Substring(t.IndexOf(':') + 1).Trim(), out gh);
                 }
             }
+
+            // 方法 2：xdotool + _NET_FRAME_EXTENTS 修正
+            if (gx < 0 || gy < 0 || gw <= 0 || gh <= 0)
+            {
+                var geo = RunBash($"xdotool getwindowgeometry --shell {_windowWid} 2>/dev/null");
+                if (!string.IsNullOrEmpty(geo))
+                {
+                    foreach (var line in geo.Split('\n'))
+                    {
+                        var parts = line.Split('=');
+                        if (parts.Length != 2) continue;
+                        if (int.TryParse(parts[1].Trim(), out int v))
+                        {
+                            var key = parts[0].Trim();
+                            if (key == "X") gx = v;
+                            else if (key == "Y") gy = v;
+                            else if (key == "WIDTH") gw = v;
+                            else if (key == "HEIGHT") gh = v;
+                        }
+                    }
+                    // _NET_FRAME_EXTENTS = left, right, top, bottom → 修正回客户区坐标
+                    var ext = RunBash($"xprop -id {_windowWid} _NET_FRAME_EXTENTS 2>/dev/null");
+                    if (!string.IsNullOrEmpty(ext) && ext.Contains("="))
+                    {
+                        var nums = ext.Substring(ext.IndexOf('=') + 1).Split(',');
+                        int fl, ft;
+                        if (nums.Length == 4 && int.TryParse(nums[0].Trim(), out fl) && int.TryParse(nums[2].Trim(), out ft))
+                        {
+                            gx -= fl; gy -= ft;
+                        }
+                    }
+                }
+            }
+
+            if (gx < 0 || gy < 0 || gw <= 0 || gh <= 0)
+            {
+                _windowWid = null;  // 窗口可能已销毁，下次重新查找
+                return;
+            }
+
+            // 几何稳定时少刷日志
+            if (gx != _gvX || gy != _gvY || gw != _gvW || gh != _gvH)
+                AGLog.Info($"窗口客户区: ({gx},{gy}) {gw}x{gh}");
+
+            _gvX = gx; _gvY = gy; _gvW = gw; _gvH = gh;
         }
 
         // ---- 坐标转换 ----
@@ -174,6 +232,7 @@ namespace AutoGamer
         static IEnumerator ClickAt(Vector2 screenPos, int button, string op, string meta, string waitId)
         {
             if (!VerifyXdotool()) { AGLog.Warn("xdotool 不可用"); yield break; }
+            RefreshGeometry();  // 每次点击前刷新窗口几何（防止窗口被 WM 移动导致点击错位）
             int sx = Mathf.RoundToInt(screenPos.x);
             int sy = Mathf.RoundToInt(screenPos.y);
             var (absX, absY) = ToScreenCoord(sx, sy);
