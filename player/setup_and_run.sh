@@ -2,11 +2,11 @@
 # setup_and_run.sh — 一键安装依赖 + 放入 SequenceReplayer.cs 到游戏工程
 #
 # 用法：
-#   ./setup_and_run.sh <game_project_dir> <sequence.json> [extra_replayer_args...]
+#   bash ./setup_and_run.sh <game_project_dir> <sequence.json> [extra_replayer_args...]
 #
 # 用例（以 OpenAW3D 为例）：
 #   cd /home/unitydev/skill/player
-#   ./setup_and_run.sh /home/unitydev/project /home/unitydev/skill/player/example_sequence.json \
+#   bash ./setup_and_run.sh /home/unitydev/project /home/unitydev/skill/player/example_sequence.json \
 #     -camera-pos 7.5,20,8.5 -camera-rot 90,0,0 -camera-fov 60 \
 #     -camera-disable-script StrategyCamera
 #
@@ -82,9 +82,8 @@ echo ""
 GAME_EXE="${EXTRA_ARGS[0]:-}"
 if [ -n "$GAME_EXE" ] && [ -x "$GAME_EXE" ]; then
   # 第一个 extra arg 是可执行文件路径，去掉它，剩下的才是 replayer 参数
-  shift 1
-  REMAINING_ARGS=("$@")
-  exec "$SCRIPT_DIR/run_replay.sh" "$GAME_EXE" "$SEQ" "./replay_output" "${REAINING_ARGS[@]}"
+  REMAINING_ARGS=("${EXTRA_ARGS[@]:1}")
+  exec "$SCRIPT_DIR/run_replay.sh" "$GAME_EXE" "$SEQ" "./replay_output" "${REMAINING_ARGS[@]}"
 else
   echo "  （未检测到游戏可执行文件路径，请手动执行 run_replay.sh）"
   echo "  用法: $SCRIPT_DIR/run_replay.sh <game_executable> <sequence.json> [output_dir] [replayer_args...]"
