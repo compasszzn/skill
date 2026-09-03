@@ -4,10 +4,10 @@
 # 用法：
 #   bash ./run_replay.sh <game_executable> <sequence.json> [output_dir] [extra_replayer_args...]
 #
-# 用例（以 OpenAW3D 为例）：
-#   cd /home/unitydev/skill/player
+# 用例（以 OpenAW3D 为例，<SKILL_DIR> 为本 skill 的 automatic-gamer-replay 目录）：
+#   cd <SKILL_DIR>/scripts
 #   bash ./run_replay.sh /home/unitydev/project/Builds/linux/OpenAW3D \
-#     /home/unitydev/skill/player/example_sequence.json \
+#     <SKILL_DIR>/examples/example_sequence.json \
 #     ./replay_output \
 #     -camera-pos 7.5,20,8.5 -camera-rot 90,0,0 -camera-fov 60 \
 #     -camera-disable-script StrategyCamera

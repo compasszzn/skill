@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>轨迹回放评估游戏复刻质量 — Skill 总结</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel2: #1c2230;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #9aa4b2;
+    --blue: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --cyan: #39c5cf;
+    --code-bg: #0b0f14;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+    line-height: 1.75;
+    font-size: 15px;
+  }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ---------- 顶部导航 ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(13,17,23,.95); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+  }
+  nav a {
+    color: var(--muted); font-size: 13px; padding: 4px 10px;
+    border-radius: 6px; border: 1px solid transparent;
+  }
+  nav a:hover { color: var(--text); border-color: var(--border); background: var(--panel); text-decoration: none; }
+
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px 80px; }
+
+  /* ---------- 头部 ---------- */
+  header.hero { padding: 48px 0 28px; border-bottom: 1px solid var(--border); margin-bottom: 36px; }
+  .hero h1 { font-size: 30px; letter-spacing: .5px; margin-bottom: 12px; }
+  .hero h1 .accent { color: var(--cyan); }
+  .hero .subtitle { color: var(--muted); font-size: 15px; max-width: 860px; }
+  .hero .tagline {
+    margin-top: 20px; padding: 16px 20px;
+    background: linear-gradient(135deg, rgba(88,166,255,.10), rgba(57,197,207,.08));
+    border: 1px solid rgba(88,166,255,.35); border-radius: 10px;
+    font-size: 15px;
+  }
+  .hero .tagline strong { color: var(--cyan); }
+  .badges { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .pill {
+    display: inline-block; font-size: 12px; padding: 2px 10px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--muted);
+  }
+  .pill.ok  { color: var(--green);  border-color: rgba(63,185,80,.4); }
+  .pill.gen { color: var(--blue);   border-color: rgba(88,166,255,.4); }
+  .pill.game{ color: var(--orange); border-color: rgba(210,153,34,.4); }
+  .pill.doc { color: var(--purple); border-color: rgba(188,140,255,.4); }
+  .pill.data{ color: var(--cyan);   border-color: rgba(57,197,207,.4); }
+
+  /* ---------- 章节 ---------- */
+  section { margin: 48px 0; }
+  h2 {
+    font-size: 21px; padding-bottom: 10px; margin-bottom: 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  h2 .num {
+    font-size: 13px; font-weight: 600; color: var(--bg);
+    background: var(--cyan); border-radius: 6px; padding: 1px 8px; flex-shrink: 0;
+  }
+  h3 { font-size: 16px; margin: 22px 0 10px; color: var(--text); }
+  h3 .mini { color: var(--muted); font-weight: 400; font-size: 13px; }
+  p { margin: 10px 0; color: var(--text); }
+  p.note { color: var(--muted); font-size: 13.5px; }
+  ul, ol { margin: 10px 0 10px 22px; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--cyan); }
+  strong { color: #fff; }
+  em { color: var(--orange); font-style: normal; }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 1px 6px; border-radius: 5px;
+    font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13px;
+    color: var(--cyan);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; overflow-x: auto; margin: 12px 0;
+  }
+  pre code { background: none; border: none; padding: 0; color: #a8d4f0; font-size: 12.8px; line-height: 1.65; }
+  pre .c { color: #7a8595; }        /* comment */
+  pre .k { color: var(--purple); }  /* keyword-ish */
+  pre .s { color: var(--green); }   /* string */
+  pre .hl{ color: var(--orange); }  /* highlight */
+
+  /* ---------- 卡片网格 ---------- */
+  .grid { display: grid; gap: 14px; }
+  .g2 { grid-template-columns: repeat(2, 1fr); }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .g4 { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 860px) { .g2,.g3,.g4 { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px;
+  }
+  .card .card-title { font-weight: 600; font-size: 14.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .card p, .card li { font-size: 13.5px; color: var(--muted); }
+  .card strong { color: var(--text); }
+  .card ul { margin-left: 18px; }
+  .card.blue { border-top: 3px solid var(--blue); }
+  .card.green { border-top: 3px solid var(--green); }
+  .card.orange { border-top: 3px solid var(--orange); }
+  .card.red { border-top: 3px solid var(--red); }
+  .card.purple { border-top: 3px solid var(--purple); }
+  .card.cyan { border-top: 3px solid var(--cyan); }
+
+  .icon { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 12px; flex-shrink: 0; }
+  .icon.b { background: rgba(88,166,255,.15); color: var(--blue); }
+  .icon.g { background: rgba(63,185,80,.15); color: var(--green); }
+  .icon.o { background: rgba(210,153,34,.15); color: var(--orange); }
+  .icon.r { background: rgba(248,81,73,.15); color: var(--red); }
+  .icon.p { background: rgba(188,140,255,.15); color: var(--purple); }
+  .icon.c { background: rgba(57,197,207,.15); color: var(--cyan); }
+
+  /* ---------- 表格 ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13.5px; }
+  th {
+    text-align: left; padding: 9px 12px; background: var(--panel2);
+    border: 1px solid var(--border); color: var(--text); font-weight: 600; white-space: nowrap;
+  }
+  td { padding: 8px 12px; border: 1px solid var(--border); color: var(--muted); vertical-align: top; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+  td strong { color: var(--text); }
+  .tc { text-align: center; }
+
+  /* ---------- 流程图 ---------- */
+  .flow { display: flex; align-items: stretch; gap: 0; margin: 20px 0; flex-wrap: wrap; }
+  .flow-step {
+    flex: 1 1 240px; min-width: 230px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; position: relative;
+  }
+  .flow-step .step-tag {
+    display: inline-block; font-size: 11.5px; font-weight: 600; color: var(--bg);
+    padding: 1px 8px; border-radius: 5px; margin-bottom: 8px;
+  }
+  .flow-step h4 { font-size: 14.5px; margin-bottom: 6px; }
+  .flow-step ul { margin: 6px 0 2px 16px; font-size: 12.8px; color: var(--muted); }
+  .flow-step li { margin: 3px 0; }
+  .flow-arrow {
+    align-self: center; color: var(--cyan); font-size: 22px; font-weight: 700;
+    padding: 0 8px; flex-shrink: 0;
+  }
+  @media (max-width: 860px) { .flow-arrow { transform: rotate(90deg); width: 100%; text-align: center; padding: 4px 0; } }
+
+  /* 坐标链路 */
+  .chain { margin: 16px 0; }
+  .chain-row {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; margin: 8px 0;
+  }
+  .chain-row .stage { font-weight: 600; font-size: 13.5px; color: var(--cyan); flex: 0 0 190px; }
+  .chain-row .desc { font-size: 13px; color: var(--muted); flex: 1; }
+  .chain-row .val { font-size: 12px; color: var(--orange); font-family: Menlo, monospace; }
+  .chain-down { text-align: center; color: var(--border); font-size: 16px; line-height: 1; }
+
+  /* 提示框 */
+  .alert {
+    border-radius: 10px; padding: 12px 16px; margin: 14px 0; font-size: 13.5px;
+    border: 1px solid; color: var(--muted);
+  }
+  .alert strong { color: var(--text); }
+  .alert.tip  { border-color: rgba(63,185,80,.45);  background: rgba(63,185,80,.07); }
+  .alert.warn { border-color: rgba(210,153,34,.45); background: rgba(210,153,34,.07); }
+  .alert.danger { border-color: rgba(248,81,73,.45); background: rgba(248,81,73,.07); }
+  .alert.info { border-color: rgba(88,166,255,.45); background: rgba(88,166,255,.07); }
+
+  /* 结论卡 */
+  .verdict { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  @media (max-width: 860px) { .verdict { grid-template-columns: 1fr; } }
+
+  footer {
+    border-top: 1px solid var(--border); margin-top: 60px; padding-top: 22px;
+    color: var(--muted); font-size: 12.5px;
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="#pipeline">评估闭环</a>
+  <a href="#principle">核心原理</a>
+  <a href="#trajectory">轨迹产物</a>
+  <a href="#metrics">评估指标</a>
+  <a href="#workflow">操作流程</a>
+  <a href="#schemes">回放方案</a>
+  <a href="#guarantees">技术保障</a>
+  <a href="#pitfalls">实战踩坑</a>
+  <a href="#diagnosis">诊断表</a>
+  <a href="#files">文件索引</a>
+</nav>
+
+<div class="wrap">
+
+<!-- ==================== 头部 ==================== -->
+<header class="hero">
+  <h1>轨迹回放 × 游戏复刻质量评估 <span class="accent">Skill 总结</span></h1>
+  <p class="subtitle">
+    本页是对 <code>skill/player/</code> 目录下「真实鼠标注入 + 键鼠序列回放」Skill 的总结，
+    整理自 4 份文档、2 份 C# 实现、2 份示例数据与 2 个一键脚本。
+    核心用途：<strong>产出一份可在不同游戏构建之间交叉复现的键鼠轨迹（trajectory），回放到复刻游戏上，
+    通过逐层对比结果来量化"游戏复刻得好不好"</strong>。
+  </p>
+  <div class="tagline">
+    <strong>一句话评估逻辑：</strong>把同一份 <code>sequence.json</code> 轨迹喂给复刻游戏——
+    如果复刻得足够好，轨迹应该能<strong>完整走完 91 个事件</strong>，并得到与录制端<strong>完全一致的终局与逐回合状态</strong>；
+    任何偏差（点击落空 / 菜单错位 / 逻辑分歧）都会让回放中断或结果偏离，<strong>即直接暴露复刻缺陷的位置</strong>。
+  </div>
+  <div class="badges">
+    <span class="pill ok">✓ 实战验证：OpenAW3D 91 事件完整对局（2026-09）</span>
+    <span class="pill gen">OS 级真实输入 · 人机等价</span>
+    <span class="pill gen">不改游戏源码即可回放</span>
+    <span class="pill gen">跨构建 / 跨机器可复现</span>
+  </div>
+</header>
+
+<!-- ==================== 1. 评估闭环 ==================== -->
+<section id="pipeline">
+  <h2><span class="num">1</span>一图看懂：轨迹评估闭环</h2>
+  <p class="note">
+    整套 Skill 就是一条「<strong>录制 → 回放 → 对比</strong>」的流水线。轨迹在录制端（带内挂的游戏）生成，
+    在回放端（复刻的游戏、不改源码）重放，两端的产物逐层对比即得到复刻质量结论。
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">
+      <span class="step-tag" style="background:var(--blue)">① 录制端</span>
+      <h4>带内挂的游戏自动跑完一局</h4>
+      <ul>
+        <li><code>AGInputInjector.cs</code>（通用注入器）</li>
+        <li><code>AGGameAdapter</code>（按游戏适配）</li>
+        <li>所有操作经 <strong>xdotool OS 级鼠标事件</strong>注入，与人类操作等价</li>
+        <li>固定相机 + 固定 RNG 种子</li>
+      </ul>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <span class="step-tag" style="background:var(--cyan)">② 轨迹产物</span>
+      <h4>三件套 trajectory</h4>
+      <ul>
+        <li><code>sequence.json</code> — 91 个键鼠事件（坐标+时序）</li>
+        <li><code>recording.mp4</code> — 完整对局录像</li>
+        <li><code>battlelog.json</code> — 逐回合状态快照（真值）</li>
+      </ul>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <span class="step-tag" style="background:var(--orange)">③ 回放端</span>
+      <h4>复刻游戏上重放轨迹</h4>
+      <ul>
+        <li><code>SequenceReplayer.cs</code> 放入 Assets（不改游戏代码）</li>
+        <li>相机固定到录制时参数</li>
+        <li>场景就绪屏障 + 客户区坐标自纠错</li>
+      </ul>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <span class="step-tag" style="background:var(--green)">④ 评估 (EVA)</span>
+      <h4>逐层对比 → 复刻质量</h4>
+      <ul>
+        <li><code>done.json</code> — 执行完整度</li>
+        <li><code>battlelog</code> diff — 逻辑一致性</li>
+        <li><code>replay.mp4</code> — 视觉一致性（VLM）</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="alert info">
+    <strong>为什么轨迹能跨游戏版本？</strong>序列只记录<strong>屏幕坐标 + 按键 + 时序</strong>，
+    不含任何 InstanceID / 内存地址 / 对象引用。所以同一份轨迹可以拿到任何一份构建（原版或复刻版）上重放，
+    是天然的"复刻一致性测试用例"。
+  </div>
+</section>
+
+<!-- ==================== 2. 核心原理 ==================== -->
+<section id="principle">
+  <h2><span class="num">2</span>核心原理：真实输入驱动（人机等价）</h2>
+  <p class="note">源自 <code>RealInputPrinciple.md</code> / <code>RealInputMigration.md</code>。这是轨迹可作为评估依据的合法性根基。</p>
+
+  <div class="grid g2">
+    <div class="card red">
+      <div class="card-title"><span class="icon r">✕</span>严格禁止（内挂直调）</div>
+      <table style="margin:6px 0 0">
+        <tr><td><code>SendMessage("OnMouseDown")</code></td></tr>
+        <tr><td>反射调用 <code>OnButtonPress(item)</code></td></tr>
+        <tr><td>直接调用游戏 manager 方法</td></tr>
+        <tr><td>hook / 覆盖 <code>Input.GetMouseButtonDown</code></td></tr>
+      </table>
+      <p style="margin-top:8px">这些方式绕过输入管线，能点到人类点不到的位置 → <strong>轨迹不可复现，评估无效</strong>。</p>
+    </div>
+    <div class="card green">
+      <div class="card-title"><span class="icon g">✓</span>必须采用（OS 级真实事件）</div>
+      <ul>
+        <li>点击 = 鼠标移动到屏幕坐标 → 按下 → 抬起</li>
+        <li>Unity 自动物理射线 → <code>OnMouseDown</code></li>
+        <li>IMGUI / uGUI 事件系统自然响应 <code>Event.current</code></li>
+        <li>xdotool（X11）注入，<em>与人类按住鼠标完全等价</em></li>
+      </ul>
+      <p style="margin-top:8px"><strong>等价性标准</strong>：人类照着录屏轨迹手动操作，必须得到与 bot 完全相同的结果。</p>
+    </div>
+  </div>
+
+  <h3>关键技术决策 <span class="mini">—— 为什么是 xdotool？</span></h3>
+  <table>
+    <tr><th>候选方案</th><th>结论</th></tr>
+    <tr><td>InputSystem StateEvent</td><td>不生成 IMGUI 的 <code>Event.current</code>，<code>GUI.Button</code> 不响应 ✕</td></tr>
+    <tr><td>WarpCursorPosition</td><td>只移动光标，不生成点击事件 ✕</td></tr>
+    <tr><td><code>activeInputHandler=Both</code> 桥接</td><td>只桥接旧 API，不桥接 IMGUI Event ✕</td></tr>
+    <tr><td><strong>xdotool（XSendEvent，OS 级）</strong></td><td><strong>引擎自动生成 Event.current，IMGUI / uGUI / 物理射线全部接收 ✓</strong></td></tr>
+  </table>
+
+  <h3>确定性前提 <span class="mini">—— 回放可对比的硬条件</span></h3>
+  <div class="grid g4">
+    <div class="card cyan"><div class="card-title">🎲 RNG</div><p>固定种子（示例 header 中 <code>seed: 0</code>）</p></div>
+    <div class="card cyan"><div class="card-title">🌐 网络</div><p>无网络交互逻辑</p></div>
+    <div class="card cyan"><div class="card-title">⏱ 时间</div><p>无 <code>DateTime.Now</code> / realtime 依赖</p></div>
+    <div class="card cyan"><div class="card-title">⚙ 物理</div><p>固定时间步长</p></div>
+  </div>
+  <p class="note">任一条件不满足，复刻版与录制端会自然偏离——此时偏离不一定是复刻缺陷，需先排除非确定性因素。</p>
+</section>
+
+<!-- ==================== 3. 轨迹产物 ==================== -->
+<section id="trajectory">
+  <h2><span class="num">3</span>Trajectory 产物与序列格式</h2>
+
+  <h3>一份完整轨迹 = 3 个文件</h3>
+  <table>
+    <tr><th>文件</th><th>内容</th><th>评估角色</th></tr>
+    <tr>
+      <td><code>sequence.json</code></td>
+      <td>键鼠操作序列：屏幕坐标 <code>(sx,sy)</code> + 操作类型 + 时间戳 + 前置等待条件</td>
+      <td><strong>驱动回放的"测试脚本"</strong>（示例：91 事件完整对局）</td>
+    </tr>
+    <tr>
+      <td><code>battlelog.json</code></td>
+      <td><code>summary</code>（result / winner / days / ops / seed）+ <code>turns[]</code> 逐回合快照（单位 / 建筑 / 资源）</td>
+      <td><strong>逻辑对比真值</strong>（示例：11 回合，red_wins，6 天）</td>
+    </tr>
+    <tr>
+      <td><code>recording.mp4</code></td>
+      <td>录制端完整对局录像（所见即所得）</td>
+      <td><strong>视觉对比真值</strong>（人工 / VLM 审查）</td>
+    </tr>
+  </table>
+
+  <h3>序列事件 schema</h3>
+  <pre><code>{
+  <span class="c">// header：game / map（主场景名，场景就绪屏障用）/ seed / 分辨率 …</span>
+  "header": { "game": "Tanks-Hotseat", "map": "Scene01", "seed": 0 },
+  "events": [
+    {
+      "i": 2,                       <span class="c">// 事件序号</span>
+      "frame": 17, "t": 4.03,       <span class="c">// 帧索引 / 时间戳（录制时 unscaledTime 秒）</span>
+      "op": "world_click",          <span class="c">// screen_click / world_click / gui_click / right_click / key / scroll …</span>
+      "sx": 249, "sy": 367,         <span class="c">// Unity Screen 坐标（左下角原点，Y 向上）</span>
+      "meta": "unit@(2,11)",        <span class="c">// 人类可读元数据 → 偏差时可直接定位"本想点什么"</span>
+      "inject": "os_mouse",         <span class="c">// 注入方式恒为 OS 级鼠标</span>
+      "wait": "game_settled"        <span class="c">// 前置等待条件（场景就绪屏障）</span>
+    }
+  ]
+}</code></pre>
+  <div class="alert tip">
+    <strong>评估利器 <code>meta</code> 字段：</strong>每个点击都标注了语义目标（如 <code>"MainMenu/Play"</code>、<code>"tile@(4,7)"</code>、<code>"BuyMenu/Tank"</code>）。
+    回放失败时，对照 <code>done.json</code> 的中断位置 + <code>meta</code>，<strong>一步定位复刻版在哪个 UI / 单位 / 逻辑上出了问题</strong>。
+  </div>
+</section>
+
+<!-- ==================== 4. 评估指标 ==================== -->
+<section id="metrics">
+  <h2><span class="num">4</span>评估指标体系：四层对比判断"复刻好坏"</h2>
+  <p class="note">由浅入深：先看"能不能走完"，再看"结果是否一致"，最后看"画面是否一致"。</p>
+
+  <table>
+    <tr><th class="tc">层级</th><th>对比对象</th><th>指标</th><th>一致性 ⇒ 结论</th></tr>
+    <tr>
+      <td class="tc"><strong>① 执行层</strong></td>
+      <td><code>done.json</code>（执行事件数 / 总事件数）</td>
+      <td><code>91/91</code> 事件全部执行、无崩溃、未超时</td>
+      <td>轨迹走通 ⇒ 复刻版<strong>基础可玩、输入管线正确</strong></td>
+    </tr>
+    <tr>
+      <td class="tc"><strong>② 终局层</strong></td>
+      <td><code>battlelog.summary</code></td>
+      <td>result / winner / days 与录制端一致</td>
+      <td>终局一致 ⇒ <strong>核心规则（胜负 / 回合）复刻正确</strong></td>
+    </tr>
+    <tr>
+      <td class="tc"><strong>③ 状态层</strong></td>
+      <td><code>battlelog.turns[]</code> 逐回合 diff</td>
+      <td>每回合单位位置 / HP / 建筑归属 / 资源逐项相等</td>
+      <td>全程一致 ⇒ <strong>移动 / 战斗 / 经济等逻辑逐条复刻正确</strong></td>
+    </tr>
+    <tr>
+      <td class="tc"><strong>④ 视觉层</strong></td>
+      <td><code>recording.mp4</code> vs <code>replay.mp4</code></td>
+      <td>帧相似度 / VLM 问答：界面布局、单位位置、动画表现</td>
+      <td>画面一致 ⇒ <strong>表现层（UI 布局 / 美术 / 镜头）也复刻到位</strong></td>
+    </tr>
+  </table>
+
+  <div class="verdict">
+    <div class="card green">
+      <div class="card-title"><span class="icon g">✓</span>判"复刻好"的证据链</div>
+      <ul>
+        <li>91/91 事件全部执行（<code>done.json</code>）</li>
+        <li>终局 <code>red_wins</code> / 6 天一致（<code>summary</code>）</li>
+        <li>11 回合状态 diff = 0（<code>turns</code>）</li>
+        <li>两段视频逐帧 / VLM 评估一致</li>
+      </ul>
+      <p style="margin-top:8px">⇒ <strong>功能、逻辑、表现三层全对齐，复刻质量高</strong></p>
+    </div>
+    <div class="card red">
+      <div class="card-title"><span class="icon r">✕</span>偏差即暴露复刻缺陷</div>
+      <ul>
+        <li>轨迹中断 / 崩溃 → 基础可玩性缺陷</li>
+        <li>某按钮点不到 → 该 UI 布局 / 交互复刻偏差</li>
+        <li>过程相似但终局不同 → 数值 / 规则差异</li>
+        <li>状态一致但画面不同 → 表现层差异</li>
+      </ul>
+      <p style="margin-top:8px">⇒ 配合 <code>meta</code> 字段<strong>精确到"哪一步、哪个元素"出错</strong></p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 5. 操作流程 ==================== -->
+<section id="workflow">
+  <h2><span class="num">5</span>完整操作流程</h2>
+
+  <h3>Step 1 · 录制轨迹 <span class="mini">（带内挂的游戏构建）</span></h3>
+  <pre><code><span class="c"># AGInputInjector.cs + AGGameAdapter 放入游戏工程后构建，运行：</span>
+AUTOGAMER_AUTO=true ./game -screen-width 800 -screen-height 600
+<span class="c"># → 产出 sequence.json + recording.mp4 + battlelog.json</span></code></pre>
+
+  <h3>Step 1.5 · 内挂自检 replay <span class="mini">（推荐：先确认 sequence 本身没问题）</span></h3>
+  <pre><code><span class="c"># 同一个内挂构建切到 replay 模式，把刚录出的轨迹先重放一遍：</span>
+AUTOGAMER_RUN_MODE=replay AUTOGAMER_SEQUENCE=&lt;output&gt;/sequence.json \
+./game -screen-width 800 -screen-height 600
+<span class="c"># 由内挂侧 AGSequenceReplayer 逐事件调 AGInputInjector.ReplayClick(sx,sy) 按屏幕坐标重放（不解析游戏对象）</span></code></pre>
+  <div class="alert tip">
+    <strong>自检的意义：</strong>同一构建内"录 → 放"一致 ⇒ 排除录制/坐标/时序问题。
+    之后再在复刻游戏上回放，出现的偏差就更能归因于<strong>复刻本身</strong>而非轨迹质量问题。
+    注意：回放循环在 <code>AGSequenceReplayer.cs</code>（内挂侧文件，不在本目录）；<code>AGInputInjector.cs</code> 提供的是
+    <code>ReplayClick</code> 回放接口 + <code>OnInjected</code> 录制钩子（每条注入 Emit 一个 <code>AGSeqEvent</code>，即 sequence.json 的来源）。
+  </div>
+
+  <h3>Step 2 · 在复刻游戏上回放 <span class="mini">（推荐方案 B：放入 SequenceReplayer.cs 重新构建）</span></h3>
+  <pre><code><span class="c"># SequenceReplayer.cs 放入复刻游戏的 Assets/（不改游戏原始代码），构建后：</span>
+./game -screen-fullscreen 0 -screen-width 800 -screen-height 600 \
+  -sequence /path/to/sequence.json \
+  -camera-pos 7.5,20,8.5 -camera-rot 90,0,0 -camera-fov 60 \
+  -camera-disable-script StrategyCamera \
+  -replay-output-dir /path/to/output \
+  -replay-quit-on-end true \
+  -replay-record true -replay-record-fps 15
+<span class="c"># → 产出 replay.mp4 + done.json + player.log</span></code></pre>
+  <div class="alert warn">
+    <strong>务必窗口模式启动</strong>（<code>-screen-fullscreen 0</code>）：全屏 Player 不接收 X11 事件；
+    也不要对窗口模式使用 <code>-replay-force-window</code>（overrideredirect 会让窗口管理器重摆窗口，几何不稳，见 <a href="#pitfalls">踩坑 #3</a>）。
+  </div>
+
+  <h3>Step 3 · 一键脚本（推荐入口）</h3>
+  <table>
+    <tr><th>脚本</th><th>作用</th><th>用法</th></tr>
+    <tr>
+      <td><code>setup_and_run.sh</code></td>
+      <td>检查并安装 xdotool / x11-utils / ffmpeg；把 <code>SequenceReplayer.cs</code> 复制进游戏工程 <code>Assets/Scripts/</code>；给出回放命令</td>
+      <td><code>bash setup_and_run.sh &lt;game_project_dir&gt; &lt;sequence.json&gt; [args...]</code></td>
+    </tr>
+    <tr>
+      <td><code>run_replay.sh</code></td>
+      <td>启动游戏 → 查找并持续置顶窗口 → 等待回放完成（300s 超时）→ 打印 <code>done.json</code> 与产物清单</td>
+      <td><code>bash run_replay.sh &lt;game_exe&gt; &lt;sequence.json&gt; &lt;output_dir&gt; [args...]</code></td>
+    </tr>
+  </table>
+
+  <h3>Step 4 · 评估对比</h3>
+  <ul>
+    <li>读 <code>done.json</code>：<strong>executed / total</strong> 事件数、视频路径、帧数 → 执行完整度</li>
+    <li>对比 <code>battlelog.json</code>：summary 终局 + turns 逐回合 diff → 逻辑一致性</li>
+    <li>对比两段 mp4：帧 diff / VLM 评估 → 视觉一致性</li>
+    <li>不一致 → 按 <a href="#diagnosis">第 8 节诊断表</a>区分"环境问题"还是"复刻缺陷"</li>
+  </ul>
+</section>
+
+<!-- ==================== 6. 回放方案 ==================== -->
+<section id="schemes">
+  <h2><span class="num">6</span>回放方案对比</h2>
+
+  <h3>方案 0 · 内挂自检 replay <span class="mini">—— 第一道验证（内挂构建内）</span></h3>
+  <table>
+    <tr><th>驱动</th><th>机制</th><th>启动方式</th><th>适用</th></tr>
+    <tr>
+      <td><code>AGSequenceReplayer.cs</code><br><span class="pill game">内挂侧文件，不在本目录</span></td>
+      <td>逐事件调 <code>AGInputInjector.ReplayClick(sx,sy)</code>，按屏幕坐标重放，不解析游戏对象</td>
+      <td><code>AUTOGAMER_RUN_MODE=replay</code> + <code>AUTOGAMER_SEQUENCE=…</code></td>
+      <td>内挂录完 sequence 后<strong>自检轨迹可复现性</strong>，再进入下面两个方案</td>
+    </tr>
+  </table>
+
+  <h3>方案 A / B · 无内挂回放 <span class="mini">—— 面向复刻游戏</span></h3>
+  <table>
+    <tr><th>维度</th><th>方案 A：Python 外部驱动（replay.py + xdotool）</th><th>方案 B：Unity SequenceReplayer.cs（RuntimeInitializeOnLoadMethod）</th></tr>
+    <tr><td><strong>游戏代码修改</strong></td><td>❌ 完全不需要</td><td>⚠️ 放入一个 .cs 文件（不改游戏原始代码）</td></tr>
+    <tr><td><strong>重新构建</strong></td><td>❌ 不需要</td><td>✅ 需要</td></tr>
+    <tr><td><strong>时序精度</strong></td><td>⚠️ 受 OS 调度影响（±10ms）</td><td><strong>✅ 协程帧级精度</strong></td></tr>
+    <tr><td><strong>相机固定</strong></td><td>❌ 无法直接控制</td><td><strong>✅ 自动按录制参数固定</strong></td></tr>
+    <tr><td><strong>内置录像</strong></td><td>❌ 需额外录屏工具</td><td><strong>✅ ReadPixels → ffmpeg 实时编码（含 IMGUI）</strong></td></tr>
+    <tr><td><strong>场景就绪屏障</strong></td><td>❌ 难以精确检测（需 wait 字段 / 截图匹配）</td><td><strong>✅ sceneLoaded + 相机就绪检测</strong></td></tr>
+    <tr><td><strong>适用场景</strong></td><td>复刻版完全不可修改时</td><td><strong>默认推荐</strong>：可放入代码时</td></tr>
+  </table>
+  <pre><code><span class="c"># 方案 A 用法（零侵入）：</span>
+python3 replay.py --sequence sequence.json --window "Game Title" \
+  --executable "./game -screen-fullscreen 0 -screen-width 800 -screen-height 600"</code></pre>
+
+  <h3>回放器命令行参数速查 <span class="mini">（方案 B，均有等价环境变量）</span></h3>
+  <table>
+    <tr><th>参数</th><th>默认值</th><th>说明</th></tr>
+    <tr><td><code>-sequence</code></td><td>—</td><td>序列文件路径（必填）</td></tr>
+    <tr><td><code>-camera-pos / -camera-rot / -camera-fov</code></td><td>7.5,20,8.5 / 90,0,0 / 60</td><td><strong>必须与录制时一致</strong>，否则坐标全偏</td></tr>
+    <tr><td><code>-camera-disable-script</code></td><td>—</td><td>禁用原相机控制脚本（如 StrategyCamera）</td></tr>
+    <tr><td><code>-replay-output-dir</code></td><td>序列同目录</td><td>产物输出目录</td></tr>
+    <tr><td><code>-replay-quit-on-end</code></td><td>true</td><td>回放结束自动退出进程</td></tr>
+    <tr><td><code>-replay-record / -replay-record-fps / -replay-record-tail</code></td><td>true / 15 / 3s</td><td>录像开关 / 帧率 / 结尾续录秒数</td></tr>
+    <tr><td><code>-replay-force-window</code></td><td>—</td><td>强制窗口大小（<em>仅游戏全屏启动时兜底</em>）</td></tr>
+  </table>
+</section>
+
+<!-- ==================== 7. 技术保障 ==================== -->
+<section id="guarantees">
+  <h2><span class="num">7</span>轨迹可复现的技术保障</h2>
+
+  <h3>7.1 坐标链路 <span class="mini">—— 从"想点什么"到"OS 点击"的完整传递</span></h3>
+  <p class="note">以点击红方坦克 <code>unit@(2,11)</code> 为例（示例序列事件 i=2）：</p>
+  <div class="chain">
+    <div class="chain-row"><span class="stage">① 碰撞体顶部</span><span class="desc">bounds.center + up×(size.y/2+0.1)，避免被地面/地块遮挡</span><span class="val">(2.0, 1.13, 10.93)</span></div>
+    <div class="chain-down">↓</div>
+    <div class="chain-row"><span class="stage">② WorldToScreenPoint</span><span class="desc">固定相机 (7.5,20,8.5) · Euler(90,0,0) · FOV 60 · 800×600 → Unity Screen 坐标（左下角原点，Y↑）</span><span class="val">(248.5, 366.9)</span></div>
+    <div class="chain-down">↓</div>
+    <div class="chain-row"><span class="stage">③ 转 X11 绝对坐标</span><span class="desc">客户区偏移 (5,56) + 缩放比 + <strong>Y 轴翻转</strong>（Unity Y↑ → X11 Y↓）</span><span class="val">(253, 289)</span></div>
+    <div class="chain-down">↓</div>
+    <div class="chain-row"><span class="stage">④ xdotool 注入</span><span class="desc">mousemove → mousedown → mouseup，OS 级真实事件，Unity 自动物理射线命中</span><span class="val">OnMouseDown ✓</span></div>
+  </div>
+  <div class="alert danger">
+    链路中任何一环不同（相机位置/角度/FOV/分辨率/客户区偏移），②③④ 步全部点错位置。
+    <strong>回放端相机必须逐参数复刻录制端</strong>，这就是 <code>-camera-*</code> 参数存在的意义。
+  </div>
+
+  <h3>7.2 相机固定参数表 <span class="mini">（示例轨迹对应的规格）</span></h3>
+  <table>
+    <tr><th>参数</th><th>值</th><th>说明</th></tr>
+    <tr><td>相机对象</td><td><code>Main Camera</code></td><td>直接固定原版主相机，不新建</td></tr>
+    <tr><td>位置</td><td>(7.5, 20, 8.5)</td><td><code>-camera-pos</code></td></tr>
+    <tr><td>旋转</td><td>Euler(90, 0, 0)</td><td><code>-camera-rot</code>，俯视</td></tr>
+    <tr><td>FOV</td><td>60</td><td><code>-camera-fov</code></td></tr>
+    <tr><td>分辨率</td><td>800 × 600</td><td><code>-screen-width / -screen-height</code></td></tr>
+    <tr><td>相机控制脚本</td><td>disabled</td><td><code>-camera-disable-script StrategyCamera</code></td></tr>
+  </table>
+
+  <h3>7.3 回放端五重自纠错机制</h3>
+  <div class="grid g3">
+    <div class="card blue"><div class="card-title"><span class="icon b">1</span>客户区坐标修正</div><p>优先 <code>xwininfo</code> 取客户区绝对坐标；后备 xdotool + <code>_NET_FRAME_EXTENTS</code> 修正外框差值。</p></div>
+    <div class="card blue"><div class="card-title"><span class="icon b">2</span>点击前刷新几何</div><p>每次点击前重新检测窗口位置/大小，窗口被 WM 移动也能跟上（自纠错）。</p></div>
+    <div class="card blue"><div class="card-title"><span class="icon b">3</span>场景就绪屏障</div><p><code>sceneLoaded</code> 后等新场景 + 相机固定完成 + 0.3s 缓冲，再执行下一事件，杜绝"点击落在旧场景"。</p></div>
+    <div class="card blue"><div class="card-title"><span class="icon b">4</span>窗口模式优先</div><p><code>-screen-fullscreen 0</code> 启动，避免 overrideredirect 引发的几何抖动。</p></div>
+    <div class="card blue"><div class="card-title"><span class="icon b">5</span>窗口持续置顶</div><p><code>run_replay.sh</code> 每 3s windowraise 一次，防止其他窗口遮挡导致点击落空。</p></div>
+    <div class="card blue"><div class="card-title"><span class="icon b">＋</span>录像含 IMGUI</div><p><code>WaitForEndOfFrame</code> 读帧缓冲 → ffmpeg（RGBA + vflip），3D 与 OnGUI 界面同时入画，供视觉评估。</p></div>
+  </div>
+</section>
+
+<!-- ==================== 8. 实战踩坑 ==================== -->
+<section id="pitfalls">
+  <h2><span class="num">8</span>实战踩坑 <span class="mini">（OpenAW3D 完整对局回放中验证，均为通用问题）</span></h2>
+  <div class="grid g3">
+    <div class="card orange">
+      <div class="card-title"><span class="icon o">#1</span>客户区 vs 外框坐标（最致命）</div>
+      <ul>
+        <li>现象：点击整体下移 29px，点 "Play" 实际点到 "Quit"，游戏退出</li>
+        <li>根因：<code>xdotool getwindowgeometry</code> 返回的是含标题栏的<strong>外框坐标</strong>；实测 xfwm4 外框 (10,85) vs 客户区 (5,56)（<code>_NET_FRAME_EXTENTS=5,5,29,5</code>）</li>
+        <li>修复：xwininfo 优先 / FRAME_EXTENTS 修正；对 xfwm4、Mutter、KWin 等所有带装饰的 Linux 桌面都存在</li>
+      </ul>
+    </div>
+    <div class="card orange">
+      <div class="card-title"><span class="icon o">#2</span>场景切换时序过快</div>
+      <ul>
+        <li>现象：事件间隔仅 0.1s，回放时场景需 1-2s 加载，下一点击落在旧场景</li>
+        <li>根因：Editor 热启动 vs standalone 冷启动加载时长差异巨大，纯时间戳间隔不安全</li>
+        <li>修复：场景就绪屏障（sceneLoaded + 相机固定 + 0.3s 缓冲）；方案 A 用 <code>wait</code> 字段标注切换点</li>
+      </ul>
+    </div>
+    <div class="card orange">
+      <div class="card-title"><span class="icon o">#3</span>overrideredirect 几何不稳</div>
+      <ul>
+        <li>现象：设置 overrideredirect 后窗口坐标在 (2,55)↔(10,85) 间跳变，点击落点不可预测</li>
+        <li>根因：WM 失去窗口控制权前后会重新摆放窗口</li>
+        <li>修复：窗口模式启动优先；overrideredirect 仅作全屏兜底且设置后等 1s；每次点击前重取几何</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 9. 诊断表 ==================== -->
+<section id="diagnosis">
+  <h2><span class="num">9</span>回放不一致诊断表 <span class="mini">—— 区分"环境问题"与"复刻缺陷"</span></h2>
+  <p class="note">回放失败 ≠ 复刻一定差。先按此表排除环境因素，剩下的偏差就是复刻缺陷的直接证据。</p>
+  <table>
+    <tr><th>症状</th><th>先排查（环境）</th><th>若排除环境后仍复现 ⇒ 复刻缺陷定位</th></tr>
+    <tr>
+      <td>所有点击整体偏移约一个标题栏高度（29px）</td>
+      <td>客户区 vs 外框坐标（踩坑 #1）；窗口几何未刷新</td>
+      <td><em>通常为环境问题</em></td>
+    </tr>
+    <tr>
+      <td>场景切换后的第一个点击不响应 / 点错</td>
+      <td>加载时序（踩坑 #2）；方案 A 缺 wait 标注</td>
+      <td><em>通常为环境问题</em>；若屏障后仍失败 → 该场景加载逻辑复刻偏差</td>
+    </tr>
+    <tr>
+      <td>点击坐标对不上（全部偏移）</td>
+      <td>相机参数 / 分辨率与录制端不一致</td>
+      <td>镜头系统 / UI 适配复刻偏差</td>
+    </tr>
+    <tr>
+      <td>特定按钮点不到（其余正常）</td>
+      <td>按钮是否处于动画/禁用状态（人类也点不到的属正常）</td>
+      <td><strong>该 UI 布局 / 交互逻辑复刻偏差</strong>（meta 字段直接指出是哪个按钮）</td>
+    </tr>
+    <tr>
+      <td>轨迹走通，但单位不移动 / 行为异常</td>
+      <td>确定性（RNG / 时间依赖 / 网络）</td>
+      <td><strong>移动 / 战斗 / 规则逻辑复刻缺陷</strong>，用 battlelog 逐回合 diff 定位首个分歧回合</td>
+    </tr>
+    <tr>
+      <td>过程一致，终局不同</td>
+      <td>seed 是否一致</td>
+      <td><strong>数值公式（伤害 / 资源 / 胜负判定）复刻缺陷</strong></td>
+    </tr>
+    <tr>
+      <td>状态层全一致，视频画面不同</td>
+      <td>录像帧率 / 编码参数差异</td>
+      <td><strong>表现层（美术 / 动画 / UI 样式）差异</strong>，不影响玩法正确性</td>
+    </tr>
+  </table>
+</section>
+
+<!-- ==================== 10. 文件索引 ==================== -->
+<section id="files">
+  <h2><span class="num">10</span>目录文件索引与环境依赖</h2>
+  <table>
+    <tr><th>文件</th><th>性质</th><th>在轨迹评估中的角色</th></tr>
+    <tr><td><code>AGInputInjector.cs</code></td><td><span class="pill gen">通用</span></td><td>录制端唯一注入口：xdotool OS 级注入 + 坐标转换 + 窗口检测（ClickScreenPos / ClickWorldPos / ClickColliderTop / RightClick / Drag…）；<code>OnInjected</code> 事件逐条 Emit <code>AGSeqEvent</code> = sequence.json 的录制来源；<code>ReplayClick</code> = 内挂自检 replay（方案 0）的执行接口</td></tr>
+    <tr><td><code>AGGameAdapter_Example.cs</code></td><td><span class="pill game">按游戏替换</span></td><td>录制端适配层示例：把 Unit / Tile / Building / MenuButton 转为通用注入器能理解的世界/屏幕坐标</td></tr>
+    <tr><td><code>SequenceReplayer.cs</code></td><td><span class="pill gen">通用</span></td><td>回放端核心：单文件放入任意 Unity 工程 Assets/，不改游戏源码；相机固定 + 场景屏障 + 内置 ffmpeg 录像 + done.json</td></tr>
+    <tr><td><code>SequenceReplaySkill.md</code></td><td><span class="pill doc">文档</span></td><td>回放 Skill 详版：序列 schema、Python 驱动源码、录像方案、相机规格、三大踩坑</td></tr>
+    <tr><td><code>RealMouseInjectionSkill.md</code></td><td><span class="pill doc">文档</span></td><td>注入 Skill 总览：文件清单 + 快速使用 + 接口说明</td></tr>
+    <tr><td><code>RealInputPrinciple.md</code></td><td><span class="pill doc">文档</span></td><td>输入规范：禁止内挂直调、必须 OS 级事件、人机等价性约束（评估合法性的根基）</td></tr>
+    <tr><td><code>RealInputMigration.md</code></td><td><span class="pill doc">文档</span></td><td>迁移实录：SendMessage → xdotool 的 6 大技术决策与已验证操作清单</td></tr>
+    <tr><td><code>example_sequence.json</code></td><td><span class="pill data">数据</span></td><td>示例轨迹：Tanks-Hotseat 91 事件完整对局（seed=0）</td></tr>
+    <tr><td><code>example_battlelog.json</code></td><td><span class="pill data">数据</span></td><td>示例战报真值：11 回合快照，summary = red_wins / 6 天 / 17.45s</td></tr>
+    <tr><td><code>run_replay.sh</code></td><td><span class="pill gen">脚本</span></td><td>一键回放：依赖检查 → 启动 → 置顶 → 等待 done.json（300s 超时）→ 收尾打印产物</td></tr>
+    <tr><td><code>setup_and_run.sh</code></td><td><span class="pill gen">脚本</span></td><td>一键部署：装依赖 → 复制回放器进游戏工程 → 引导构建与回放</td></tr>
+  </table>
+
+  <h3>环境依赖（Linux）</h3>
+  <table>
+    <tr><th>依赖</th><th>安装</th><th>用途</th></tr>
+    <tr><td>xdotool</td><td><code>sudo apt install xdotool</code></td><td>OS 级鼠标/键盘注入（必需）</td></tr>
+    <tr><td>x11-utils</td><td><code>sudo apt install x11-utils</code></td><td>xwininfo 客户区坐标检测（强烈推荐）</td></tr>
+    <tr><td>ffmpeg</td><td><code>sudo apt install ffmpeg</code></td><td>回放录像 mp4 编码（视觉评估用）</td></tr>
+    <tr><td>wmctrl</td><td><code>sudo apt install wmctrl</code></td><td>窗口管理（可选）</td></tr>
+  </table>
+  <p class="note">跨平台替代：Windows 用 pyautogui（客户区坐标免修正）；macOS 用 cliclick；通用可用 pynput。</p>
+</section>
+
+<footer>
+  <p>来源：skill/player/ 目录（Real Mouse Injection &amp; Sequence Replay Skill）· 整理于 2026-09-02 ·
+  实战验证基线：OpenAW3D 91 事件完整对局回放 + mp4 录像（2026-09）</p>
+</footer>
+
+</div>
+</body>
+</html>
